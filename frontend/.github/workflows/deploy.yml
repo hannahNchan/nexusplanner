@@ -1,0 +1,35 @@
+name: Deploy to Raspberry Pi (Self-hosted)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clean and install dependencies
+        run: |
+          npm cache clean --force
+          rm -rf node_modules package-lock.json
+          npm install --legacy-peer-deps --ignore-optional
+
+      - name: Build application
+        run: npm run build
+
+      - name: Deploy files
+        run: |
+          sudo rm -rf /var/www/nexuxplanner/dist/*
+          sudo cp -r dist/* /var/www/nexuxplanner/dist/
+          sudo chown -R www-data:www-data /var/www/nexuxplanner/dist
+
+      - name: Reload Nginx
+        run: sudo systemctl reload nginx
+
+      - name: Deployment complete
+        run: echo "✅ Deployment completed successfully!"

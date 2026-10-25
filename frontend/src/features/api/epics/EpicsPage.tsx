@@ -1,0 +1,130 @@
+import { useEffect, useState } from "react";
+import {
+  CircularProgress,
+  Container,
+  Stack,
+  Typography,
+} from "@mui/material";
+import EpicsTable from "../../board/components/EpicsTable/EpicsTable";
+import {
+  fetchEpics,
+  fetchEpicPhases,
+  createEpic,
+  type EpicWithDetails,
+  type EpicPhase,
+} from "../../api/epicService";
+import {
+  fetchDefaultPointSystem,
+  fetchPointValues,
+  type PointValue,
+} from "../../api/catalogService";
+import { useProject } from "../../../shared/contexts/ProjectContext";
+import { logError } from "../../../shared/utils/errorHandling";
+
+type EpicsPageProps = {
+  userId: string;
+};
+
+const EpicsPage = ({ userId }: EpicsPageProps) => {
+  const { currentProject } = useProject();
+  const [epics, setEpics] = useState<EpicWithDetails[]>([]);
+  const [phases, setPhases] = useState<EpicPhase[]>([]);
+  const [pointValues, setPointValues] = useState<PointValue[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const [epicsData, phasesData, pointSystem] = await Promise.all([
+        fetchEpics(userId, currentProject?.id ?? null),
+        fetchEpicPhases(),
+        fetchDefaultPointSystem(),
+      ]);
+
+      setEpics(epicsData);
+      setPhases(phasesData);
+
+      if (pointSystem) {
+        const points = await fetchPointValues(pointSystem.id);
+        setPointValues(points);
+      }
+    } catch (err) {
+      logError("epicsPage.load", err);
+      setError("No se pudieron cargar las épicas. Intenta recargar la página.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, [userId, currentProject]);
+
+  const handleAddEpic = async () => {
+    if (!currentProject) return;
+
+    try {
+      await createEpic(userId, { name: "Nueva épica", project_id: currentProject.id });
+      await loadData();
+    } catch (err) {
+      logError("epicsPage.create", err);
+      setError("No se pudo crear la épica.");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Container maxWidth={false} sx={{ py: 4 }}>
+        <Stack spacing={2} alignItems="center" py={8}>
+          <CircularProgress />
+          <Typography color="text.secondary">Cargando épicas...</Typography>
+        </Stack>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth={false} sx={{ py: 4 }}>
+        <Stack spacing={2} alignItems="center" py={8}>
+          <Typography color="error" variant="h6">
+            {error}
+          </Typography>
+        </Stack>
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth={false} sx={{ py: 4 }}>
+      <Stack spacing={3}>
+        {/* Header */}
+        <Stack spacing={1}>
+          <Typography variant="h4" fontWeight={700}>
+            Épicas
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Gestiona las épicas de tu proyecto y conecta tareas relacionadas.
+          </Typography>
+        </Stack>
+
+        {/* Tabla */}
+        <EpicsTable
+          {...({
+            userId,
+            epics,
+            phases,
+            pointValues,
+            onRefresh: loadData,
+            onAddEpic: handleAddEpic,
+          } as any)}
+        />
+      </Stack>
+    </Container>
+  );
+};
+
+export default EpicsPage;
